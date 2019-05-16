@@ -22,6 +22,7 @@ module.exports = (start = { lng: -78.94497078111351, lat: 42.92790541070884 }, g
 
   // reverse start point for finding more paths
   // {id, from, to} helps for tracking the direction of chosen path, [to] is assumed to be current location, [from] previous coordinates, [id] id of current road
+  // TODO remove [from]
   const reversedStart = { id: startId + 'R', from: startCoordinates, to: startEndCoordinates }
 
   // nodes to visit
@@ -92,6 +93,7 @@ const _h = goal => {
 }
 
 // for returning final path
+// TODO connecting nodes into actual path - some are reversed
 const reconstructPath = (cameFrom, nodeId) => {
   if(cameFrom[nodeId]) {
     const p = reconstructPath(cameFrom, cameFrom[nodeId])
