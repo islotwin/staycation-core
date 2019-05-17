@@ -3,38 +3,32 @@ const roads = require('./getRoads.js')
 const precision = 6
 
 module.exports = (start = { lng: -78.94497078111351, lat: 42.92790541070884 }, goal = { lng: -79.13298961331189, lat: 42.96236429963978 }) => {
-  // TODO, what if there are different points in the same distance from starting point ? 
-  // get first from list
-  const startNode = getNearestNodes(start)[0]
-  const startId = startNode.id
-  const goalSet = getNearestNodes(goal)
-
-  const startCoordinates = getNearestCoordinates(start, startNode)
+  console.log('Looking for path... [ start, goal ]', start, goal)
+  const goalSet = getNearestNodes(goal, false)
   const goalCoordinates = getNearestCoordinates(goal, goalSet[0])
-  const startEndCoordinates = startNode.coordinates[0] === startCoordinates ? startNode.coordinates[startNode.coordinates.length - 1] : startNode.coordinates[0]
+  const startSet = getStartSet(start)
 
   // keep track of path
   const cameFrom = {}
-  const h = _h(goalCoordinates)
+  startSet.forEach(n => {
+    cameFrom[n.id] = { reversed: n.reversed }
+  })
+  const h = heuristics(goalCoordinates)
 
   // nodes already visited
   let closedSet = []
-
-  // reverse start point for finding more paths
-  // {id, from, to} helps for tracking the direction of chosen path, [to] is assumed to be current location, [from] previous coordinates, [id] id of current road
-  // TODO remove [from]
-  const reversedStart = { id: startId + 'R', from: startCoordinates, to: startEndCoordinates }
-
   // nodes to visit
-  let openSet = [ { id: startId, from: startEndCoordinates, to: startCoordinates }, reversedStart ]
+  let openSet = [...startSet]
 
   const gScore = {}
-  gScore[startId] = 0
-  gScore[reversedStart.id] = +getDistanceToNode(reversedStart.id)
+  startSet.forEach(({ id }) => {
+    gScore[id] = id.endsWith('R') ? +getRoadLength(id) : 0
+  });
 
   const fScore = {}
-  fScore[startId] = h(startCoordinates)
-  fScore[reversedStart.id] = h(startEndCoordinates)
+  startSet.forEach(({ id, location }) => {
+    fScore[id] = +(h(location) + gScore[id]).toFixed(6)
+  })
 
   while(openSet.length) {
     // choose node with smallest fScore (heuristics value)  
@@ -48,7 +42,8 @@ module.exports = (start = { lng: -78.94497078111351, lat: 42.92790541070884 }, g
       return r
     }, null)
     
-    if(goalSet.find(g => g.id === x.id)) {
+    if(goalSet.find(g => g.id === x.id || g.id === x.id.slice(0, x.id.length - 1))) {
+      console.log('Path found [ start, goal ]', start, goal)
       return reconstructPath(cameFrom, x.id)
     }
 
@@ -59,7 +54,8 @@ module.exports = (start = { lng: -78.94497078111351, lat: 42.92790541070884 }, g
       if(closedSet.find(n => n.id === y.id)) {
         continue
       }
-      const tentativeGScore = (gScore[x.id] + getDistanceToNode(y.id)).toFixed(precision)
+
+      const tentativeGScore = (gScore[x.id] + getRoadLength(y.id)).toFixed(precision)
       let tentativeIsBetter = false
 
       if(!openSet.find(n => n.id === y.id)) {
@@ -72,19 +68,19 @@ module.exports = (start = { lng: -78.94497078111351, lat: 42.92790541070884 }, g
       }
 
       if(tentativeIsBetter) {
-        cameFrom[y.id] = x.id
+        cameFrom[y.id] = { from: x.id, reversed: y.reversed }
         gScore[y.id] = +tentativeGScore
-        fScore[y.id] = +(gScore[y.id] + h(y.to)).toFixed(precision)
+        fScore[y.id] = +(gScore[y.id] + h(y.location)).toFixed(precision)
       }
     }
   }
 
-  console.log('path not found: [ start, goal ]', start, goal)
+  console.log('Path not found: [ start, goal ]', start, goal)
   return []
 }
 
 // heuristics
-const _h = goal => {
+const heuristics = goal => {
   // choose coordinates of the point explicitly 
   return (coordinates = {}) => {
     return calculateDistance(goal, coordinates)
@@ -95,20 +91,27 @@ const _h = goal => {
 // for returning final path
 // TODO connecting nodes into actual path - some are reversed
 const reconstructPath = (cameFrom, nodeId) => {
-  if(cameFrom[nodeId]) {
-    const p = reconstructPath(cameFrom, cameFrom[nodeId])
-    return [...p, getNode(nodeId)]
+  const { from, reversed } = cameFrom[nodeId] || {}
+  const node = getNode(nodeId)
+  const coordinates = reversed ? node.coordinates.reverse() : node.coordinates
+  if(from) {
+    const p = reconstructPath(cameFrom, from)
+    return [ ...p, { ...node, coordinates } ]
   }
-  if(nodeId != null && nodeId.endsWith('R')) {
-    return [ getNode(nodeId) ]
+  // if(nodeId.endsWith('R')) {
+  if(node) {
+    return [ { ...node, coordinates } ]
   }
   return []
 }
 
-// get neighbours ids of current node
-const getNeighbours = ({ id, from, to }) => {
-  const { lng, lat } = to
+// get neighbours of current node
+const getNeighbours = ({ id, location }) => {
+  const { lng, lat } = location
   return roads.reduce((acc, curr) => {
+      if(id.startsWith(curr.id) || curr.id.startsWith(id)) {
+        return acc
+      }
       const first = curr.coordinates[0]
       const last = curr.coordinates[curr.coordinates.length - 1]
       if(lng === first.lng && lat === first.lat) {
@@ -116,17 +119,17 @@ const getNeighbours = ({ id, from, to }) => {
           ...acc,
           {
             id: curr.id,
-            from: first,
-            to: last
+            location: last,
+            reversed: false
           }]
       }
-      if(lng === last.lng && lat === last.lat) {
+      if(lng === last.lng && lat === last.lat && curr.twoWay) {
         return [
           ...acc,
           {
             id: curr.id,
-            from: last,
-            to: first
+            location: first,
+            reversed: true
           }]
       }
       return acc
@@ -134,9 +137,9 @@ const getNeighbours = ({ id, from, to }) => {
 }
 
 // get length of the chosen road
-const getDistanceToNode = node => {
+const getRoadLength = nodeId => {
   // change to km
-  const { coordinates } = getNode(node)
+  const { coordinates } = getNode(nodeId)
   return +coordinates.slice(1).reduce((acc, curr, index) => {
     return acc + calculateDistance(coordinates[index], curr)
   }, 0).toFixed(precision)
@@ -154,23 +157,27 @@ const getNode = nodeId => {
 }
 
 // return set of the nearest nodes to given location
-const getNearestNodes = location => {
-  return roads.reduce(( { min, distance }, { id, coordinates }) => {
-    const startDist = calculateDistance(location, coordinates[0])
-    const endDist = calculateDistance(location, coordinates[coordinates.length - 1])
+// fromLocation says if we want to find nearest nodes routing from given location (vs going to given location)
+const getNearestNodes = (location, fromLocation = true) => {
+  return roads.reduce(( { min, distance }, { id, coordinates, twoWay }) => {
+    const startDist = twoWay || fromLocation ? calculateDistance(location, coordinates[0]) : Infinity
+    const endDist = twoWay || !fromLocation ? calculateDistance(location, coordinates[coordinates.length - 1]) : Infinity
     const calcDist = Math.min(startDist, endDist)
+
     if(distance == null || (calcDist < distance)) {
       return { 
-        min: [{ id, coordinates }],
+        min: [{ id, coordinates, twoWay }],
         distance: calcDist
       }
     }
+
     if(calcDist === distance) {
       return {
-        min: [...min, { id, coordinates }],
+        min: [...min, { id, coordinates, twoWay }],
         distance
       }
     }
+
     return {
       min,
       distance
@@ -179,8 +186,35 @@ const getNearestNodes = location => {
 }
 
 // return nearest coordinates of valid nodes on the map to given location
-const getNearestCoordinates = (location, { coordinates = [] }) => {
+const getNearestCoordinates = (location, { coordinates = [], twoWay }) => {
     const startDist = calculateDistance(location, coordinates[0])
-    const endDist = calculateDistance(location, coordinates[coordinates.length - 1])
+    const endDist = twoWay ? calculateDistance(location, coordinates[coordinates.length - 1]) : Infinity
     return startDist < endDist ? coordinates[0] : coordinates[coordinates.length - 1]
+}
+
+const getStartSet = start => {
+  return getNearestNodes(start).reduce((acc, n) => {
+      const startCoordinates = getNearestCoordinates(start, n)
+      const reversed = n.coordinates[0] !== startCoordinates
+      const node = {
+            id: n.id,
+            location: startCoordinates,
+            reversed
+          }
+
+      if(!n.twoWay) {
+        return [ ...acc, node ]
+      }
+
+      // reverse start point for finding more paths
+      const startEndCoordinates = !reversed ? n.coordinates[n.coordinates.length - 1] : n.coordinates[0]
+      return [
+        ...acc, 
+        node,
+        {
+          id: n.id + 'R',
+          location: startEndCoordinates,
+          reversed: !reversed
+        }]
+    }, [])
 }
