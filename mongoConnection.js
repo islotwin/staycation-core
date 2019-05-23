@@ -11,6 +11,7 @@ const dbName = 'SPDB';
 // Create a new MongoClient
 const client = new MongoClient(url);
 
+// radius of circle near given point
 const nearPoint = 2;
 
 const lowPer = 0.33;
@@ -57,12 +58,14 @@ function setRandomSightSeeingRoads(numberOfRoads, coll) {
       });
 }
 
-function setRandomSightSeeingNearPoints(numberOfRoadsPerPoint, numberOfPoints, coll) {
+async function setRandomSightSeeingNearPoints(numberOfRoadsPerPoint, numberOfPoints) {
 
     idsOfRandomPoints = [];
     idsNearPoint = [];
     idsToChange = [];
-    
+    const coll = await getRoadsConnection();
+    await clearSightSeeingRoads(coll)
+
     coll.aggregate([ { $sample: { size: numberOfPoints } } ] ).toArray(function(err, result) {
         if (err) throw err;
         for (i = 0; i < result.length; i++){
@@ -105,10 +108,16 @@ function setRandomSightSeeingNearPoints(numberOfRoadsPerPoint, numberOfPoints, c
 function clearSightSeeingRoads(coll) {
     newValue = {$set: {sightSeeing: 0} };
 
-    coll.updateMany({}, newValue, function(err, res) {
-        if (err) throw err;
-        console.log(res.result.nModified + " document(s) updated");
-      });
+    return new Promise((resolve, reject) => {
+        coll.updateMany({}, newValue, function(err, res) {
+            if (err) {
+                reject(err)
+            }
+            const modified = res.result.nModified
+            console.log(modified + " document(s) updated");
+            resolve(modified)
+          });
+    })
 }
 
 function resetSightSeeingRoads(numberOfRoads, coll) {
@@ -187,6 +196,17 @@ async function getSightSeeingRoads() {
         })
     });
 }
+
+async function getAllRoads() {
+    const roads = await getRoadsConnection();
+    return new Promise((resolve, reject) => {
+        roads.find({}).toArray(function(err, result) {
+            if (err) throw err;
+            resolve(result);
+        })
+    });
+}
+
 
 //L, M, H
 function setWithBoundaries(type, numberOfRoads) {
@@ -269,5 +289,7 @@ makeGetCrossingRoads()
 module.exports = {
     makeGetCrossingRoads,
     makeGetRoad,
-    getSightSeeingRoads
+    getSightSeeingRoads,
+    getAllRoads,
+    setRandomSightSeeingNearPoints
 }
