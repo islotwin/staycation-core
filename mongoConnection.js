@@ -1,9 +1,7 @@
-config = require('./config.json');
+const config = require('./config.json');
 
-var http = require('http');
-var geojsonTools = require('geojson-tools');
+const geojsonTools = require('geojson-tools');
 const MongoClient = require('mongodb').MongoClient;
-const assert = require('assert');
 
 const url = config.url;
 
@@ -18,9 +16,27 @@ const nearPoint = 2;
 const lowPer = 0.33;
 const midPer = 0.66;
 
+function getRoadsConnection() {
+    return new Promise((resolve, reject) => {
+        MongoClient.connect(url, async function(err, client) {
+            console.log("Connected successfully to server");
+            const db = client.db(dbName);
+            roads = db.collection('roads');
+        
+            // const id = await getSightSeeingRoads();
+            // console.log(id);
+            if (err) {
+                console.log(err)
+                reject(err)
+                return
+            }
+
+            resolve(roads)
+        });
+    })
+}
 
 function setRandomSightSeeingRoads(numberOfRoads, coll) {
-
     idsToChange = [];
     coll.aggregate([ { $sample: { size: numberOfRoads } } ] ).toArray(function(err, result) {
         if (err) throw err;
@@ -86,9 +102,6 @@ function setRandomSightSeeingNearPoints(numberOfRoadsPerPoint, numberOfPoints, c
     });
 }
 
-
-
-
 function clearSightSeeingRoads(coll) {
     newValue = {$set: {sightSeeing: 0} };
 
@@ -125,9 +138,12 @@ function setTwoWayRoads(probability) {
     });
 }
 
-
+async function makeGetCrossingRoads() {
+    const roads = await getRoadsConnection()
+    return async id => await getCrossingRoads(id, roads)
+}
 //id in ""
-function getCrossingRoads(id) {
+function getCrossingRoads(id, roads) {
     return new Promise((resolve, reject) => {
         roads.findOne({ "properties.FacilityID": id}, function(err, result) {
             if (err) throw err;
@@ -148,7 +164,12 @@ function getCrossingRoads(id) {
     })
 }
 
-function getRoad(id) {
+async function makeGetRoad() {
+    const roads = await getRoadsConnection()
+    return async id => await getRoad(id, roads)
+}
+
+function getRoad(id, roads) {
     return new Promise((resolve, reject) => {
         roads.findOne({ "properties.FacilityID": id}, function(err, result) {
             if (err) throw err;
@@ -157,7 +178,8 @@ function getRoad(id) {
     });
 }
 
-function getSightSeeingRoads() {
+async function getSightSeeingRoads() {
+    const roads = await getRoadsConnection();
     return new Promise((resolve, reject) => {
         roads.find({sightSeeing: 1}).toArray(function(err, result) {
             if (err) throw err;
@@ -233,22 +255,19 @@ function setWithBoundaries(type, numberOfRoads) {
     });
 }
 
+// makeGetRoad()
+//     .then(getRoad => getRoad('26077'))
+//     .then(r => console.log(r))
 
-client.connect(async function(err) {
-    assert.equal(null, err);
-    console.log("Connected successfully to server");
-    const db = client.db(dbName);
-    roads = db.collection('roads');
+// getSightSeeingRoads()
+//     .then(r => console.log(r))
 
-    const id = await getSightSeeingRoads();
-    console.log(id);
-    
-});
+makeGetCrossingRoads()
+    .then(getCrossingRoads => getCrossingRoads('26077'))
+    .then(console.log)
 
-
-
-
-
-
-
-
+module.exports = {
+    makeGetCrossingRoads,
+    makeGetRoad,
+    getSightSeeingRoads
+}
