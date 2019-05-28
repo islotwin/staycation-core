@@ -19,8 +19,8 @@ const midPer = 0.66;
 
 function getRoadsConnection() {
     return new Promise((resolve, reject) => {
-        MongoClient.connect(url, async function(err, client) {
-            console.log("Connected successfully to server");
+        MongoClient.connect(url, { useNewUrlParser: true }, async function(err, client) {
+            console.log("Connected to db");
             const db = client.db(dbName);
             roads = db.collection('roads');
         
@@ -126,13 +126,16 @@ function resetSightSeeingRoads(numberOfRoads, coll) {
 }
 
 
-function setTwoWayRoads(probability) {
+async function setTwoWayRoads(probability) {
+    console.log('probability', probability)
+    const roads = await getRoadsConnection()
     roads.find({}).toArray(function(err, result) {
+        console.log('result length', result.length)
         for (i = 0; i < result.length; i++){
             id = result[i].properties.FacilityID
             query = { "properties.FacilityID" : id};
             
-            if(Math.random() < probability) {
+            if(Math.random() <= probability) {
                 newValue = {$set: {twoWay: 1} };
             } 
             else {
@@ -282,14 +285,15 @@ function setWithBoundaries(type, numberOfRoads) {
 // getSightSeeingRoads()
 //     .then(r => console.log(r))
 
-makeGetCrossingRoads()
-    .then(getCrossingRoads => getCrossingRoads('26077'))
-    .then(console.log)
+// makeGetCrossingRoads()
+//     .then(getCrossingRoads => getCrossingRoads('26077'))
+//     .then(console.log)
 
 module.exports = {
     makeGetCrossingRoads,
     makeGetRoad,
     getSightSeeingRoads,
     getAllRoads,
-    setRandomSightSeeingNearPoints
+    setRandomSightSeeingNearPoints,
+    setTwoWayRoads
 }
