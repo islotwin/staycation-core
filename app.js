@@ -2,6 +2,7 @@ const express = require('express')
 const { RoadUtils } = require('./RoadUtils.js')
 const aStar = require('./algorithm.js')
 const dbService = require('./mongoConnection.js')
+const makeTimeElapsed = require('./timeElapsed.js')
 const app = express()
 const port = 8080
 
@@ -28,8 +29,10 @@ app.get('/roads/path', async (req, res) => {
   const { flng, flat, tlng, tlat, dist = 0} = req.query
   const start = { lng: flng, lat: flat }
   const goal = { lng: tlng, lat: tlat }
-  const path = await aStar(start, goal, dist)
-  return res.send(path)
+  const timeElapsed = makeTimeElapsed()
+  const result = await aStar(start, goal, dist)
+  const [ time, timeNS ] = timeElapsed()
+  return res.send({ ...result, timeElapsed: timeNS })
 })
 
 app.put('/roads/sightseeing', async (req, res) => {

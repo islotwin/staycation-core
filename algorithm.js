@@ -28,7 +28,7 @@ module.exports = async (
 
       if(sightSeeingDistance > sightSeeingLength) {
         console.log("Not enough sightseeing roads!")
-        return { path: [], sightSeeingDistance: 0 };
+        return { path: [], sightSeeingDistance: 0, distance: 0 };
       }
 
       // keep track of path
@@ -85,7 +85,8 @@ module.exports = async (
                     return acc + getRoadLength(r.coordinates)
                   }
                   return acc
-                }, 0) 
+                }, 0),
+                distance: +path.reduce((acc, { coordinates }) => acc + getRoadLength(coordinates), 0).toFixed(PRECISION)  
               }
           }
           openSet = openSet.filter(n => n.id !== x.id)
@@ -125,7 +126,7 @@ module.exports = async (
       }
 
       console.log('Path not found: [ start, goal ]', start, goal)
-      return { path: [], sightSeeingDistance: 0 };
+      return { path: [], sightSeeingDistance: 0, distance: 0 };
 }
 
 // heuristics

@@ -1,17 +1,5 @@
-const ROADS = require('./roads.js')
 const dbService = require('./mongoConnection.js')
-
-const roads = (() => {
-  return ROADS.features.map(({ type, geometry, properties }) => {
-      return {
-        id: properties.FacilityID,
-        coordinates: geometry.coordinates.map(([lng, lat]) => ({ lng, lat })),
-        twoWay: Math.random() < 0.8,
-        sightSeeing: Math.random() < 0.5
-      }
-    })
-})()
-
+  
 class RoadUtils {
   constructor(roads) {
     this.roads = roads
@@ -38,7 +26,6 @@ class RoadUtils {
   }
 
 }
-
 
 const mapper = ({ properties, geometry, twoWay, sightSeeing }) => {
   return {
