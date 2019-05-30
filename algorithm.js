@@ -13,22 +13,27 @@ const SPREAD = 10
 module.exports = async (
     start = { lng: -78.94497078111351, lat: 42.92790541070884 }, 
     goal = { lng: -79.13298961331189, lat: 42.96236429963978 },
-    sightSeeingDistance = 0
+    sightSeeingDistance = 0,
+    shortest = true
     ) => {
       console.log('Looking for path... [ start, goal ]', start, goal)
+
       const roadUtils = await RoadUtils.getInstance()
       const roads = roadUtils.roads
+      const getTravelTime = roadUtils.getTravelTime
 
       const goalSet = getNearestNodes(goal, roads, false)
       const goalCoordinates = getNearestCoordinates(goal, goalSet[0])
       const startSet = getStartSet(start, roads)
+
+      console.log('startSet', startSet)
 
       const sightSeeingLength = roadUtils.getSightSeeingRoutes()
         .reduce((acc, { coordinates }) =>  acc + getRoadLength(coordinates))
 
       if(sightSeeingDistance > sightSeeingLength) {
         console.log("Not enough sightseeing roads!")
-        return { path: [], sightSeeingDistance: 0, distance: 0 };
+        return { path: [], sightSeeingDistance: 0, distance: 0, time: 0 };
       }
 
       // keep track of path
@@ -36,7 +41,7 @@ module.exports = async (
       startSet.forEach(n => {
         cameFrom[n.id] = { reversed: n.reversed }
       })
-      const _heuristics = heuristics(roadUtils, goalCoordinates)
+      const _heuristics = heuristics(roadUtils, goalCoordinates, shortest)
       const _getNeighbours = getNeighbours(roads)
 
       // nodes already visited
@@ -46,13 +51,15 @@ module.exports = async (
 
       const distanceToGo = {}
       const gScore = {}
-      startSet.forEach(({ id, sightSeeing, coordinates }) => {
+      startSet.forEach(({ id, sightSeeing, coordinates, maxSpeed }) => {
         if(id.endsWith('R')) {
           const roadLength = +getRoadLength(coordinates)
-          gScore[id] = roadLength
+
+          gScore[id] = shortest ? roadLength : getTravelTime(roadLength, maxSpeed)
           distanceToGo[id] = sightSeeing ? sightSeeingDistance - roadLength : sightSeeingDistance
         }
         else {
+          gScore[id] = 0
           distanceToGo[id] = sightSeeingDistance
         }
       })
@@ -61,6 +68,8 @@ module.exports = async (
       startSet.forEach(({ id, location }) => {
         fScore[id] = +(_heuristics(location, distanceToGo[id]) + gScore[id]).toFixed(6)
       })
+      console.log('fscore', fScore)
+      console.log('gscore', gScore)
 
       while(openSet.length) {
         // choose node with smallest fScore (heuristics value)  
@@ -73,11 +82,16 @@ module.exports = async (
 
           return r
         }, null)
+        console.log('came from', cameFrom[x.id])
+        console.log('current', x.id, x.maxSpeed)
+        console.log('fscore', fScore)
+        console.log('gscore', gScore)
         
         if(goalSet.find(g => g.id === x.id || g.id === x.id.slice(0, x.id.length - 1))) {
           if(distanceToGo[x.id] <= 0) {
             console.log('Path found [ start, goal ]', start, goal)
             const path = reconstructPath(roadUtils, cameFrom, x.id)
+            path.map(p => console.log('path', p.id, p.maxSpeed))
             return { 
               path, 
               sightSeeingDistance: path.reduce((acc, r) => {
@@ -86,7 +100,8 @@ module.exports = async (
                   }
                   return acc
                 }, 0),
-                distance: +path.reduce((acc, { coordinates }) => acc + getRoadLength(coordinates), 0).toFixed(PRECISION)  
+                distance: +path.reduce((acc, { coordinates }) => acc + getRoadLength(coordinates), 0).toFixed(PRECISION),
+                time: path.reduce((acc, { coordinates, maxSpeed }) => acc + getTravelTime(getRoadLength(coordinates), maxSpeed), 0).toFixed(PRECISION)
               }
           }
           openSet = openSet.filter(n => n.id !== x.id)
@@ -103,8 +118,11 @@ module.exports = async (
 
           const yCoordinates = roadUtils.getNode(y.id).coordinates
           const roadLength = +(getRoadLength(yCoordinates))
-          const tentativeGScore = (gScore[x.id] + roadLength).toFixed(PRECISION)
+          const cost = shortest ? roadLength : getTravelTime(roadLength, y.maxSpeed)
+
+          const tentativeGScore = (gScore[x.id] + cost).toFixed(PRECISION)
           let tentativeIsBetter = false
+          console.log('y', y.id, tentativeGScore)
 
           if(!openSet.find(n => n.id === y.id)) {
             openSet = [...openSet, y]
@@ -116,8 +134,6 @@ module.exports = async (
 
           if(tentativeIsBetter) {
             distanceToGo[y.id] = y.sightSeeing ? distanceToGo[x.id] - roadLength : distanceToGo[x.id]
-            if(y.sightSeeing) {
-            }
             cameFrom[y.id] = { from: x.id, reversed: y.reversed }
             gScore[y.id] = +tentativeGScore
             fScore[y.id] = +(gScore[y.id] + _heuristics(y.location, distanceToGo[y.id])).toFixed(PRECISION)
@@ -126,22 +142,25 @@ module.exports = async (
       }
 
       console.log('Path not found: [ start, goal ]', start, goal)
-      return { path: [], sightSeeingDistance: 0, distance: 0 };
+      return { path: [], sightSeeingDistance: 0, distance: 0, time: 0 };
 }
 
 // heuristics
-const heuristics = (roadUtils, goal) => {
+const heuristics = (roadUtils, goal, shortest) => {
   const sightSeeingRoutes = roadUtils.getSightSeeingRoutes()
 
   // choose coordinates of the point explicitly 
   return (coordinates = {}, distanceToGo = 0) => {
     if(distanceToGo <= 0) {
-      return calculateDistance(goal, coordinates)
+      const distance = calculateDistance(goal, coordinates)
+      return shortest ? distance : roadUtils.estimateTravelTime(distance)
     }
     if (goal.lat === coordinates.lat && goal.lng === coordinates.lng) {
       return Infinity
     }
-    return getNearestSightSeeingRoutes(sightSeeingRoutes, goal, coordinates)[0].estimated
+    const distance = getNearestSightSeeingRoutes(sightSeeingRoutes, goal, coordinates)[0].estimated
+
+    return shortest ? distance : roadUtils.estimateTravelTime(distance)
   }
 }
 
@@ -218,7 +237,8 @@ const getNeighbours = roads => ({ id, location }) => {
             id: curr.id,
             location: last,
             reversed: false,
-            sightSeeing: curr.sightSeeing
+            sightSeeing: curr.sightSeeing,
+            maxSpeed: curr.maxSpeed
           }]
       }
       if(lng === last.lng && lat === last.lat && curr.twoWay) {
@@ -228,7 +248,8 @@ const getNeighbours = roads => ({ id, location }) => {
             id: curr.id,
             location: first,
             reversed: true,
-            sightSeeing: curr.sightSeeing
+            sightSeeing: curr.sightSeeing,
+            maxSpeed: curr.maxSpeed
           }]
       }
       return acc
@@ -238,21 +259,22 @@ const getNeighbours = roads => ({ id, location }) => {
 // return set of the nearest nodes to given location
 // fromLocation says if we want to find nearest nodes routing from given location (vs going to given location)
 const getNearestNodes = (location, roads, fromLocation = true) => {
-  return roads.reduce(( { min, distance }, { id, coordinates, twoWay }) => {
+  return roads.reduce(( { min, distance }, n) => {
+    const { twoWay, coordinates } = n
     const startDist = twoWay || fromLocation ? calculateDistance(location, coordinates[0]) : Infinity
     const endDist = twoWay || !fromLocation ? calculateDistance(location, coordinates[coordinates.length - 1]) : Infinity
     const calcDist = Math.min(startDist, endDist)
 
     if(distance == null || (calcDist < distance)) {
       return { 
-        min: [{ id, coordinates, twoWay }],
+        min: [{ ...n }],
         distance: calcDist
       }
     }
 
     if(calcDist === distance) {
       return {
-        min: [...min, { id, coordinates, twoWay }],
+        min: [...min, { ...n }],
         distance
       }
     }
@@ -279,7 +301,9 @@ const getStartSet = (start, roads) => {
             id: n.id,
             location: startCoordinates,
             reversed,
-            sightSeeing: n.sightSeeing
+            sightSeeing: n.sightSeeing,
+            maxSpeed: n.maxSpeed,
+            coordinates: n.coordinates
           }
 
       if(!n.twoWay) {
@@ -295,7 +319,9 @@ const getStartSet = (start, roads) => {
           id: n.id + 'R',
           location: startEndCoordinates,
           reversed: !reversed,
-          sightSeeing: n.sightSeeing
+          sightSeeing: n.sightSeeing,
+          maxSpeed: n.maxSpeed,
+          coordinates: n.coordinates
         }]
     }, [])
 }

@@ -3,6 +3,8 @@ const dbService = require('./mongoConnection.js')
 class RoadUtils {
   constructor(roads) {
     this.roads = roads
+    this.maxSpeed = this.getMaxSpeed()
+    console.log('this.maxSpeed', this.maxSpeed)
   }
 
   static async getRoads() {
@@ -25,14 +27,29 @@ class RoadUtils {
     return this.roads.find(r => r.id === id)
   }
 
+  getMaxSpeed() {
+    return this.roads.reduce((acc, { maxSpeed }) => {
+      return Math.max(acc, maxSpeed)
+    }, 0)
+  }
+
+  estimateTravelTime(roadLength) {
+    return this.getTravelTime(roadLength, this.maxSpeed)
+  }
+
+  getTravelTime(roadLength, speed) {
+    return +(roadLength / speed).toFixed(6)
+  }
+
 }
 
-const mapper = ({ properties, geometry, twoWay, sightSeeing }) => {
+const mapper = ({ properties, geometry, twoWay, sightSeeing, maxSpeed }) => {
   return {
     id: properties.FacilityID,
     coordinates: geometry.coordinates.map(([lng, lat]) => ({ lng, lat })),
-    twoWay: !!twoWay || true,
-    sightSeeing
+    twoWay: !!twoWay,
+    sightSeeing,
+    maxSpeed: maxSpeed > 1 ? 1/1000000 : 1
   }
 }
 

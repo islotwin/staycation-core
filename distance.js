@@ -14,9 +14,11 @@ const calculateDistance = ({ lat, lng }, { lat: lat2, lng: lng2 }) => {
 // get length of the chosen road
 const getRoadLength = (coordinates = []) => {
   // change to km
-  return +(coordinates.slice(1).reduce((acc, curr, index) => {
+  const roadLength = +(coordinates.slice(1).reduce((acc, curr, index) => {
     return acc + calculateDistance(coordinates[index], curr)
   }, 0)).toFixed(PRECISION)
+
+  return roadLength
 }
 
 // be sure to return a number

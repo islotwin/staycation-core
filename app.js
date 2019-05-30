@@ -26,13 +26,13 @@ app.get('/roads', async (req, res, next) => {
 })
 
 app.get('/roads/path', async (req, res) => {
-  const { flng, flat, tlng, tlat, dist = 0} = req.query
+  const { flng, flat, tlng, tlat, dist = 0, shortest = true } = req.query
   const start = { lng: flng, lat: flat }
   const goal = { lng: tlng, lat: tlat }
   const timeElapsed = makeTimeElapsed()
-  const result = await aStar(start, goal, dist)
+  const result = await aStar(start, goal, dist, shortest)
   const [ time, timeNS ] = timeElapsed()
-  return res.send({ ...result, timeElapsed: timeNS })
+  return res.send({ ...result, executionTime: timeNS })
 })
 
 app.put('/roads/sightseeing', async (req, res) => {
