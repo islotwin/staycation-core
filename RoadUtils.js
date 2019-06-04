@@ -49,7 +49,7 @@ const mapper = ({ properties, geometry, twoWay, sightSeeing, maxSpeed }) => {
     coordinates: geometry.coordinates.map(([lng, lat]) => ({ lng, lat })),
     twoWay: !!twoWay,
     sightSeeing,
-    maxSpeed: maxSpeed > 1 ? 1/1000000 : 1
+    maxSpeed: maxSpeed > 1 ? 2 : 1
   }
 }
 

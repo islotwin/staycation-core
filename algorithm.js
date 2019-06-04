@@ -16,8 +16,10 @@ module.exports = async (
     sightSeeingDistance = 0,
     shortest = true
     ) => {
-      console.log('Looking for path... [ start, goal ]', start, goal)
-
+      // console.log('Looking for path... [ start, goal ]', start, goal)
+      if (shortest === 'false') {
+        shortest = false
+      }
       const roadUtils = await RoadUtils.getInstance()
       const roads = roadUtils.roads
       const getTravelTime = roadUtils.getTravelTime
@@ -25,8 +27,6 @@ module.exports = async (
       const goalSet = getNearestNodes(goal, roads, false)
       const goalCoordinates = getNearestCoordinates(goal, goalSet[0])
       const startSet = getStartSet(start, roads)
-
-      console.log('startSet', startSet)
 
       const sightSeeingLength = roadUtils.getSightSeeingRoutes()
         .reduce((acc, { coordinates }) =>  acc + getRoadLength(coordinates))
@@ -68,8 +68,6 @@ module.exports = async (
       startSet.forEach(({ id, location }) => {
         fScore[id] = +(_heuristics(location, distanceToGo[id]) + gScore[id]).toFixed(6)
       })
-      console.log('fscore', fScore)
-      console.log('gscore', gScore)
 
       while(openSet.length) {
         // choose node with smallest fScore (heuristics value)  
@@ -82,16 +80,12 @@ module.exports = async (
 
           return r
         }, null)
-        console.log('came from', cameFrom[x.id])
-        console.log('current', x.id, x.maxSpeed)
-        console.log('fscore', fScore)
-        console.log('gscore', gScore)
         
         if(goalSet.find(g => g.id === x.id || g.id === x.id.slice(0, x.id.length - 1))) {
           if(distanceToGo[x.id] <= 0) {
             console.log('Path found [ start, goal ]', start, goal)
             const path = reconstructPath(roadUtils, cameFrom, x.id)
-            path.map(p => console.log('path', p.id, p.maxSpeed))
+            // path.map(p => console.log('path', p.id, p.maxSpeed))
             return { 
               path, 
               sightSeeingDistance: path.reduce((acc, r) => {
@@ -101,7 +95,7 @@ module.exports = async (
                   return acc
                 }, 0),
                 distance: +path.reduce((acc, { coordinates }) => acc + getRoadLength(coordinates), 0).toFixed(PRECISION),
-                time: path.reduce((acc, { coordinates, maxSpeed }) => acc + getTravelTime(getRoadLength(coordinates), maxSpeed), 0).toFixed(PRECISION)
+                time: +path.reduce((acc, { coordinates, maxSpeed }) => acc + getTravelTime(getRoadLength(coordinates), maxSpeed), 0).toFixed(PRECISION)
               }
           }
           openSet = openSet.filter(n => n.id !== x.id)
@@ -122,7 +116,6 @@ module.exports = async (
 
           const tentativeGScore = (gScore[x.id] + cost).toFixed(PRECISION)
           let tentativeIsBetter = false
-          console.log('y', y.id, tentativeGScore)
 
           if(!openSet.find(n => n.id === y.id)) {
             openSet = [...openSet, y]
